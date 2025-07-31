@@ -11,8 +11,10 @@ export interface WhiteboardElement {
   strokeWidth: number;
   fontSize?: number;
   fontFamily?: string;
+  shapeType?: 'rectangle' | 'circle' | 'line';
   timestamp: number;
   userId: string;
+  isComplete?: boolean; // New flag for two-stage validation
 }
 
 export interface Room {

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "core-js-pure": "^3.44.0",
+    "mongodb": "^6.18.0"
+  }
+}

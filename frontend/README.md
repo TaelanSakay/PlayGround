@@ -1,46 +1,116 @@
-# Getting Started with Create React App
+# Whiteboard App Frontend (Vite)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is the frontend for the Real-Time Multi-User Whiteboard Application, migrated from Create React App to Vite for improved performance and security.
 
-## Available Scripts
+## 🚀 Quick Start
 
-In the project directory, you can run:
+### Prerequisites
+- Node.js (v16 or higher)
+- npm or yarn
 
-### `npm start`
+### Installation
+```bash
+npm install
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### Development
+```bash
+npm run dev
+```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+### Production Build
+```bash
+npm run build
+```
 
-### `npm test`
+### Preview Production Build
+```bash
+npm run preview
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 🛠 Tech Stack
 
-### `npm run build`
+- **Vite** - Fast build tool and dev server
+- **React 19** - UI library with TypeScript
+- **Socket.IO Client** - Real-time communication
+- **TailwindCSS** - Utility-first CSS framework
+- **TypeScript** - Type safety
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## 📁 Project Structure
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```
+src/
+├── components/          # React components
+│   ├── Canvas.tsx      # Drawing canvas component
+│   ├── RoomList.tsx    # Room selection component
+│   ├── Toolbar.tsx     # Drawing tools toolbar
+│   ├── UserList.tsx    # Active users list
+│   └── Whiteboard.tsx  # Main whiteboard component
+├── hooks/              # Custom React hooks
+│   └── useSocket.ts    # Socket.IO connection hook
+├── services/           # API services
+│   └── api.ts          # Room management API
+├── types/              # TypeScript type definitions
+│   └── whiteboard.ts   # Whiteboard element types
+├── utils/              # Utility functions
+├── App.tsx             # Main app component
+├── App.css             # App-specific styles
+├── index.css           # Global styles with TailwindCSS
+├── main.tsx            # Vite entry point
+└── logo.svg            # App logo
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 🔧 Configuration
 
-### `npm run eject`
+### Environment Variables
+Create a `.env` file in the root directory:
+```env
+VITE_API_URL=http://localhost:5000/api
+VITE_SOCKET_URL=http://localhost:5000
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+### TailwindCSS
+The project uses TailwindCSS for styling. Configuration is in `tailwind.config.js`.
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### TypeScript
+TypeScript configuration is optimized for Vite in `tsconfig.app.json`.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## 🎯 Features
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+- **Real-time Collaboration**: Multiple users can draw simultaneously
+- **Drawing Tools**: Pen, eraser, text, shapes (rectangle, circle, line)
+- **Undo/Redo**: Full history management with keyboard shortcuts
+- **Color & Stroke Control**: Customizable colors and stroke widths
+- **Live User Cursors**: See other users' cursor positions
+- **Room Management**: Create and join whiteboard sessions
+- **Modern UI**: Clean, responsive interface with TailwindCSS
 
-## Learn More
+## 🔄 Migration from CRA
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+This project was successfully migrated from Create React App to Vite. See `MIGRATION_GUIDE.md` for detailed information about the migration process.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 🚀 Deployment
+
+### Vercel
+1. Connect your GitHub repository to Vercel
+2. Set build command: `npm run build`
+3. Set output directory: `dist`
+4. Add environment variables: `VITE_API_URL`, `VITE_SOCKET_URL`
+
+### Netlify
+1. Connect your repository to Netlify
+2. Set build command: `npm run build`
+3. Set publish directory: `dist`
+4. Add environment variables
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.

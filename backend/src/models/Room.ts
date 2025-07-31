@@ -15,6 +15,7 @@ export interface IWhiteboardElement {
   fontFamily?: string;
   timestamp: number;
   userId: string;
+  isComplete?: boolean; // New flag for two-stage validation
 }
 
 export interface IRoom extends Document {
@@ -40,7 +41,8 @@ const WhiteboardElementSchema = new Schema<IWhiteboardElement>({
   fontSize: { type: Number },
   fontFamily: { type: String },
   timestamp: { type: Number, required: true },
-  userId: { type: String, required: true }
+  userId: { type: String, required: true },
+  isComplete: { type: Boolean, default: false }
 });
 
 const RoomSchema = new Schema<IRoom>({

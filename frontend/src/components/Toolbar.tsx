@@ -9,6 +9,7 @@ interface ToolbarProps {
   onStrokeWidthChange: (width: number) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onClear: () => void;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -22,6 +23,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onStrokeWidthChange,
   onUndo,
   onRedo,
+  onClear,
   canUndo,
   canRedo,
 }) => {
@@ -72,6 +74,16 @@ const Toolbar: React.FC<ToolbarProps> = ({
             title="Redo"
           >
             <span className="text-lg">↷</span>
+          </button>
+          <button
+            onClick={() => {
+              console.log('Clear button clicked in Toolbar');
+              onClear();
+            }}
+            className="w-full h-10 flex items-center justify-center rounded-md bg-red-50 text-red-600 hover:bg-red-100 border-2 border-transparent transition-colors"
+            title="Clear Canvas"
+          >
+            <span className="text-lg">🗑️</span>
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import './App.css';
 import RoomList from './components/RoomList';
 import Whiteboard from './components/Whiteboard';

@@ -16,7 +16,8 @@ A collaborative whiteboard application built with React, TypeScript, Node.js, Ex
 ## 🛠 Tech Stack
 
 ### Frontend
-- React 18 with TypeScript
+- React 19 with TypeScript
+- Vite for fast development and optimized builds
 - Socket.IO Client for real-time communication
 - TailwindCSS for styling
 - Canvas API for drawing functionality
@@ -82,7 +83,7 @@ whiteboard-app/
    ```env
    PORT=5000
    MONGODB_URI=mongodb://localhost:27017/whiteboard
-   FRONTEND_URL=http://localhost:3000
+       FRONTEND_URL=http://localhost:5173
    NODE_ENV=development
    ```
 
@@ -101,11 +102,11 @@ whiteboard-app/
 7. **Start the frontend development server**
    ```bash
    cd frontend
-   npm start
+   npm run dev
    ```
 
 8. **Open your browser**
-   Navigate to `http://localhost:3000`
+   Navigate to `http://localhost:5173`
 
 ## 🎯 Usage
 
@@ -149,9 +150,9 @@ npm start        # Start production server
 
 ### Frontend Scripts
 ```bash
-npm start        # Start development server
+npm run dev      # Start development server
 npm run build    # Build for production
-npm test         # Run tests
+npm run preview  # Preview production build
 ```
 
 ## 🚀 Deployment
@@ -159,8 +160,8 @@ npm test         # Run tests
 ### Frontend (Vercel)
 1. Connect your GitHub repository to Vercel
 2. Set build command: `npm run build`
-3. Set output directory: `build`
-4. Add environment variable: `REACT_APP_API_URL`
+3. Set output directory: `dist`
+4. Add environment variable: `VITE_API_URL`
 
 ### Backend (Render/Heroku)
 1. Set up MongoDB Atlas or other cloud database
