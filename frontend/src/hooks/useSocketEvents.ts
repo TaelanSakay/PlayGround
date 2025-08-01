@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { WhiteboardElement } from '../types/whiteboard';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -6,9 +6,7 @@ interface UseSocketEventsProps {
   socket: any;
   currentRoom: { roomId: string } | null;
   elements: WhiteboardElement[];
-  setElements: (elements: WhiteboardElement[]) => void;
-  setUndoStack: (stack: WhiteboardElement[][]) => void;
-  setRedoStack: (stack: WhiteboardElement[][]) => void;
+  setElements: React.Dispatch<React.SetStateAction<WhiteboardElement[]>>;
   setCurrentElement: (element: WhiteboardElement | null) => void;
   setIsDrawing: (drawing: boolean) => void;
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -18,7 +16,7 @@ interface UseSocketEventsProps {
   onElementCompleted?: (elementId: string, completedElement: WhiteboardElement) => void;
   selectedTool?: string;
   color?: string;
-  fillColor?: string; // New: fill color support
+  fillColor?: string;
   strokeWidth?: number;
 }
 
@@ -27,8 +25,6 @@ export const useSocketEvents = ({
   currentRoom,
   elements,
   setElements,
-  setUndoStack,
-  setRedoStack,
   setCurrentElement,
   setIsDrawing,
   canvasRef,
@@ -38,7 +34,7 @@ export const useSocketEvents = ({
   onElementCompleted,
   selectedTool = 'pen',
   color = '#000000',
-  fillColor = '#000000', // New: fill color default
+  fillColor = '#000000',
   strokeWidth = 2
 }: UseSocketEventsProps) => {
   const { showNotification } = useNotification();
@@ -88,7 +84,7 @@ export const useSocketEvents = ({
       x: startX,
       y: startY,
       color: color,
-      fillColor: fillColor, // Add fill color
+      fillColor: fillColor,
       strokeWidth: strokeWidth,
       width: 0,
       height: 0,
@@ -163,6 +159,11 @@ export const useSocketEvents = ({
             Math.pow(element.x - pos.x, 2) + Math.pow(element.y - pos.y, 2)
           );
           return distance <= 30;
+        } else if (element.type === 'image') {
+          // Handle image erasing
+          const withinX = pos.x >= element.x && pos.x <= element.x + (element.width || 100);
+          const withinY = pos.y >= element.y && pos.y <= element.y + (element.height || 100);
+          return withinX && withinY;
         }
         return false;
       });
@@ -170,7 +171,7 @@ export const useSocketEvents = ({
       elementsToDelete.forEach(element => {
         console.log('Deleting element:', element.id);
         // Update local state immediately
-        setElements(prev => prev.filter(el => el.id !== element.id));
+        setElements((prev: WhiteboardElement[]) => prev.filter(el => el.id !== element.id));
         // Call callback if provided
         onElementDeleted?.(element.id);
         // Emit to server
@@ -179,6 +180,34 @@ export const useSocketEvents = ({
           elementId: element.id
         });
       });
+      
+      setIsDrawing(false);
+      return;
+    }
+
+    // Handle select tool for moving images
+    if (currentTool === 'select') {
+      // Find element at click position
+      const clickedElement = elements.find(element => {
+        if (element.type === 'image') {
+          const withinX = pos.x >= element.x && pos.x <= element.x + (element.width || 100);
+          const withinY = pos.y >= element.y && pos.y <= element.y + (element.height || 100);
+          return withinX && withinY;
+        }
+        return false;
+      });
+
+      if (clickedElement) {
+        setCurrentElement({
+          ...clickedElement,
+          isDragging: true,
+          dragOffset: {
+            x: pos.x - clickedElement.x,
+            y: pos.y - clickedElement.y
+          }
+        } as any);
+        return;
+      }
       
       setIsDrawing(false);
       return;
@@ -222,6 +251,7 @@ export const useSocketEvents = ({
           fontSize: 16,
           fontFamily: 'Arial',
           color: currentColor,
+          strokeWidth: strokeWidth,
           timestamp: Date.now(),
           userId: socket.id,
           isComplete: false
@@ -250,14 +280,22 @@ export const useSocketEvents = ({
     });
   }, [socket, currentRoom, getMousePos, setIsDrawing, createShapeElement, generateUniqueId, setCurrentElement, setElements, onElementCreated, onElementDeleted, elements]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>, currentElement: WhiteboardElement | null) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>, currentElement: WhiteboardElement | null, currentTool: string) => {
     if (!socket || !currentRoom || !currentElement) return;
 
     const pos = getMousePos(e);
     
     let updatedElement: WhiteboardElement;
     
-    if (currentElement.type === 'shape') {
+    // Handle dragging images
+    if (currentTool === 'select' && (currentElement as any).isDragging) {
+      const dragOffset = (currentElement as any).dragOffset || { x: 0, y: 0 };
+      updatedElement = {
+        ...currentElement,
+        x: pos.x - dragOffset.x,
+        y: pos.y - dragOffset.y
+      };
+    } else if (currentElement.type === 'shape') {
       updatedElement = updateShapeElement(currentElement, pos.x, pos.y);
     } else if (currentElement.type === 'drawing') {
       updatedElement = {
@@ -280,7 +318,7 @@ export const useSocketEvents = ({
     // Call callback if provided
     onElementUpdated?.(updatedElement.id, updatedElement);
     
-    // Emit update to server
+    // Emit update to server (with debouncing for performance)
     socket.emit('update-element', {
       roomId: currentRoom.roomId,
       elementId: currentElement.id,
@@ -288,10 +326,34 @@ export const useSocketEvents = ({
     });
   }, [socket, currentRoom, getMousePos, updateShapeElement, setCurrentElement, setElements, onElementUpdated]);
 
-  const handleMouseUp = useCallback((currentElement: WhiteboardElement | null) => {
+  const handleMouseUp = useCallback((currentElement: WhiteboardElement | null, currentTool: string) => {
     if (!socket || !currentRoom || !currentElement) return;
 
     setIsDrawing(false);
+    
+    // Handle completing drag operation
+    if (currentTool === 'select' && (currentElement as any).isDragging) {
+      const completedElement = { ...currentElement };
+      delete (completedElement as any).isDragging;
+      delete (completedElement as any).dragOffset;
+      
+      setElements(prev => 
+        prev.map(el => 
+          el.id === currentElement.id ? completedElement : el
+        )
+      );
+      
+      onElementCompleted?.(currentElement.id, completedElement);
+      
+      socket.emit('complete-element', {
+        roomId: currentRoom.roomId,
+        elementId: currentElement.id,
+        element: completedElement
+      });
+      
+      setCurrentElement(null);
+      return;
+    }
     
     // Validate element before completing
     let isValid = false;
@@ -307,6 +369,8 @@ export const useSocketEvents = ({
       }
     } else if (currentElement.type === 'text') {
       isValid = currentElement.text && currentElement.text.trim().length > 0;
+    } else if (currentElement.type === 'image') {
+      isValid = true; // Images are always valid
     }
 
     if (isValid) {
@@ -348,7 +412,7 @@ export const useSocketEvents = ({
     setCurrentElement(null);
   }, [socket, currentRoom, setCurrentElement, setIsDrawing, setElements, onElementCompleted, onElementDeleted]);
 
-  // Socket event listeners
+  // Socket event listeners - REMOVED undo/redo management
   useEffect(() => {
     if (!socket) return;
 
@@ -358,10 +422,6 @@ export const useSocketEvents = ({
       
       // Clear all elements from local state
       setElements([]);
-      
-      // Clear undo/redo history
-      setUndoStack([]);
-      setRedoStack([]);
       
       // Clear any active drawing states
       setCurrentElement(null);
@@ -382,7 +442,7 @@ export const useSocketEvents = ({
 
     // Updated element-drawn listener to handle shapeType
     const handleElementDrawn = (data: { element: WhiteboardElement }) => {
-      console.log('Element drawn:', data.element.id, 'shapeType:', data.element.shapeType);
+      console.log('Element drawn:', data.element.id, 'type:', data.element.type, 'shapeType:', data.element.shapeType);
       
       setElements(prevElements => {
         // Avoid duplicates
@@ -396,7 +456,7 @@ export const useSocketEvents = ({
 
     // Updated element-updated listener to handle shapeType  
     const handleElementUpdated = (data: { elementId: string; updates: Partial<WhiteboardElement> | WhiteboardElement }) => {
-      console.log('Element updated:', data.elementId, 'shapeType:', (data.updates as any)?.shapeType);
+      console.log('Element updated:', data.elementId, 'type:', (data.updates as any)?.type, 'shapeType:', (data.updates as any)?.shapeType);
       
       setElements(prevElements => 
         prevElements.map(element => 
@@ -409,7 +469,7 @@ export const useSocketEvents = ({
 
     // Updated element-completed listener to handle shapeType
     const handleElementCompleted = (data: { element: WhiteboardElement }) => {
-      console.log('Element completed:', data.element.id, 'shapeType:', data.element.shapeType);
+      console.log('Element completed:', data.element.id, 'type:', data.element.type, 'shapeType:', data.element.shapeType);
       
       setElements(prevElements => 
         prevElements.map(element => 
@@ -429,29 +489,6 @@ export const useSocketEvents = ({
       );
     };
 
-    // Enhanced undo/redo actions from other clients
-    const handleUndoAction = (data: { elements: WhiteboardElement[] }) => {
-      console.log('Undo action received from another user');
-      setElements(data.elements);
-      
-      // Clear undo/redo stacks for other users to prevent conflicts
-      setUndoStack([]);
-      setRedoStack([]);
-      
-      showNotification('Another user performed an undo action', 'info');
-    };
-
-    const handleRedoAction = (data: { elements: WhiteboardElement[] }) => {
-      console.log('Redo action received from another user');
-      setElements(data.elements);
-      
-      // Clear undo/redo stacks for other users to prevent conflicts
-      setUndoStack([]);
-      setRedoStack([]);
-      
-      showNotification('Another user performed a redo action', 'info');
-    };
-
     // Handle text updates from other clients
     const handleTextUpdated = (data: { element: WhiteboardElement }) => {
       console.log('Text updated from another user:', data.element.id);
@@ -465,28 +502,24 @@ export const useSocketEvents = ({
       );
     };
 
-    // Add event listeners
+    // Add event listeners - REMOVED undo/redo listeners
     socket.on('canvas-cleared', handleCanvasCleared);
     socket.on('element-drawn', handleElementDrawn);
     socket.on('element-updated', handleElementUpdated);
     socket.on('element-completed', handleElementCompleted);
     socket.on('element-deleted', handleElementDeleted);
-    socket.on('undo-action', handleUndoAction);
-    socket.on('redo-action', handleRedoAction);
     socket.on('text-updated', handleTextUpdated);
 
-    // Cleanup
+    // Cleanup - REMOVED undo/redo cleanup
     return () => {
       socket.off('canvas-cleared', handleCanvasCleared);
       socket.off('element-drawn', handleElementDrawn);
       socket.off('element-updated', handleElementUpdated);
       socket.off('element-completed', handleElementCompleted);
       socket.off('element-deleted', handleElementDeleted);
-      socket.off('undo-action', handleUndoAction);
-      socket.off('redo-action', handleRedoAction);
       socket.off('text-updated', handleTextUpdated);
     };
-  }, [socket, setElements, setUndoStack, setRedoStack, setCurrentElement, setIsDrawing, canvasRef, showNotification]);
+  }, [socket, setElements, setCurrentElement, setIsDrawing, canvasRef, showNotification]);
 
   return {
     clearCanvas,
@@ -496,4 +529,4 @@ export const useSocketEvents = ({
     createShapeElement,
     updateShapeElement
   };
-}; 
+};

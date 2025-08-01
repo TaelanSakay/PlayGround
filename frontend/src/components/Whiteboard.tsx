@@ -14,7 +14,7 @@ interface WhiteboardProps {
 interface HistoryState {
   elements: WhiteboardElement[];
   timestamp: number;
-  action: string; // Track what action was performed
+  action: string;
 }
 
 const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) => {
@@ -22,46 +22,37 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
   const [users, setUsers] = useState<User[]>([]);
   const [selectedTool, setSelectedTool] = useState('pen');
   const [color, setColor] = useState('#000000');
-  const [fillColor, setFillColor] = useState('#FFFFFF'); // New: fill color state
+  const [fillColor, setFillColor] = useState('#FFFFFF');
   const [strokeWidth, setStrokeWidth] = useState(2);
   
-  // Improved history management for undo/redo
+  // History management
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [isUndoRedoAction, setIsUndoRedoAction] = useState(false);
-  const [isExternalAction, setIsExternalAction] = useState(false);
   
   // Refs for managing updates
+  const isRemoteUpdate = useRef(false);
+  const isPerformingUndoRedo = useRef(false);
+  const lastElementsRef = useRef<WhiteboardElement[]>([]);
+  const cursorTimeoutRef = useRef<number | null>(null);
   const pendingUpdates = useRef<Map<string, WhiteboardElement>>(new Map());
   const updateTimeouts = useRef<Map<string, number>>(new Map());
-  const lastElementsRef = useRef<WhiteboardElement[]>([]);
-  
-  // Cursor timeout for stopping cursor updates
-  const cursorTimeoutRef = useRef<number | null>(null);
   
   const socket = useSocket();
 
-  // Download canvas functionality with white background
+  // Download canvas functionality
   const handleDownload = useCallback(() => {
     const canvas = document.querySelector('canvas');
     if (canvas) {
-      // Create a temporary canvas with white background
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
       if (!tempCtx) return;
 
-      // Set the same dimensions as the original canvas
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
-
-      // Fill with white background
       tempCtx.fillStyle = '#FFFFFF';
       tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-
-      // Draw the original canvas content on top
       tempCtx.drawImage(canvas, 0, 0);
 
-      // Convert to data URL and download
       const dataURL = tempCanvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `whiteboard-${room.roomId}-${Date.now()}.png`;
@@ -72,118 +63,153 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
     }
   }, [room.roomId]);
 
-  // Enhanced add to history with better tracking
+  // Centralized history management
   const addToHistory = useCallback((newElements: WhiteboardElement[], action: string = 'modify') => {
-    if (isUndoRedoAction || isExternalAction) {
-      setIsUndoRedoAction(false);
-      setIsExternalAction(false);
+    // Don't add to history during undo/redo operations or remote updates
+    if (isPerformingUndoRedo.current || isRemoteUpdate.current) {
       return;
     }
 
-    // Don't add to history if elements haven't actually changed
-    const elementsChanged = JSON.stringify(newElements) !== JSON.stringify(lastElementsRef.current);
-    if (!elementsChanged) return;
+    // Don't add if elements haven't changed
+    const elementsStr = JSON.stringify(newElements.map(el => ({ id: el.id, type: el.type, x: el.x, y: el.y })));
+    const lastElementsStr = JSON.stringify(lastElementsRef.current.map(el => ({ id: el.id, type: el.type, x: el.x, y: el.y })));
+    
+    if (elementsStr === lastElementsStr) {
+      return;
+    }
 
-    lastElementsRef.current = newElements;
+    lastElementsRef.current = [...newElements];
 
     const newHistoryState: HistoryState = {
-      elements: [...newElements],
+      elements: JSON.parse(JSON.stringify(newElements)), // Deep copy
       timestamp: Date.now(),
       action
     };
 
     setHistory(prev => {
+      // Remove any future history when adding new state
       const updatedHistory = prev.slice(0, historyIndex + 1);
-      // Limit history size to prevent memory issues
+      
+      // Limit history size
       const maxHistory = 50;
       if (updatedHistory.length >= maxHistory) {
         updatedHistory.shift();
-        setHistoryIndex(prev => Math.max(0, prev - 1));
         return [...updatedHistory, newHistoryState];
       }
+      
       return [...updatedHistory, newHistoryState];
     });
-    setHistoryIndex(prev => prev + 1);
-  }, [isUndoRedoAction, isExternalAction, historyIndex]);
+    
+    setHistoryIndex(prev => {
+      const newIndex = Math.min(prev + 1, 49); // Max index
+      return newIndex;
+    });
+  }, [historyIndex]);
 
-  // Enhanced undo functionality
+  // Undo functionality
   const handleUndo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const previousState = history[newIndex];
-      setElements(previousState.elements);
-      setHistoryIndex(newIndex);
-      setIsUndoRedoAction(true);
-      
-      // Sync with other users
-      socket?.emit('undo-action', { 
-        roomId: room.roomId, 
-        elements: previousState.elements,
-        action: 'undo'
-      });
-    }
+    if (historyIndex <= 0 || history.length === 0) return;
+    const previousIndex = historyIndex - 1;
+    const previousState = history[previousIndex];
+    if (!previousState) return;
+  
+    isPerformingUndoRedo.current = true;
+    lastElementsRef.current = [...previousState.elements];
+    setElements(previousState.elements);
+    setHistoryIndex(previousIndex);
+  
+    socket?.emit("undo-action", {
+      roomId: room.roomId,
+      elements: previousState.elements,
+    });
+  
+    setTimeout(() => {
+      isPerformingUndoRedo.current = false;
+    }, 100);
   }, [historyIndex, history, socket, room.roomId]);
 
-  // Enhanced redo functionality
+  // Redo functionality
   const handleRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const nextState = history[newIndex];
-      setElements(nextState.elements);
-      setHistoryIndex(newIndex);
-      setIsUndoRedoAction(true);
-      
-      // Sync with other users
-      socket?.emit('redo-action', { 
-        roomId: room.roomId, 
-        elements: nextState.elements,
-        action: 'redo'
-      });
+    if (historyIndex >= history.length - 1) {
+      console.log('Cannot redo: historyIndex =', historyIndex, 'history.length =', history.length);
+      return;
     }
+
+    const nextIndex = historyIndex + 1;
+    const nextState = history[nextIndex];
+    
+    if (!nextState) {
+      console.log('No next state found');
+      return;
+    }
+
+    console.log('Performing redo, going to index:', nextIndex);
+    
+    isPerformingUndoRedo.current = true;
+    setElements(nextState.elements);
+    setHistoryIndex(nextIndex);
+    lastElementsRef.current = [...nextState.elements];
+    
+    // Sync with server and other users
+    socket?.emit('redo-action', { 
+      roomId: room.roomId, 
+      elements: nextState.elements
+    });
+
+    setTimeout(() => {
+      isPerformingUndoRedo.current = false;
+    }, 100);
   }, [historyIndex, history, socket, room.roomId]);
 
-  // Clear canvas - Enhanced with proper history tracking
+  // Clear canvas
   const handleClear = useCallback(() => {
     console.log('Clear button clicked');
     
-    // Update local state immediately for responsive feel
     setElements([]);
     addToHistory([], 'clear');
     lastElementsRef.current = [];
     
-    // Then notify server
     socket?.emit('clear-canvas', { roomId: room.roomId });
   }, [socket, room.roomId, addToHistory]);
 
   // Check if undo/redo is available
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
+  const canUndo = historyIndex > 0 && history.length > 0;
+  const canRedo = historyIndex < history.length - 1 && history.length > 0;
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'y')) {
         event.preventDefault();
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-        handleUndo();
-      }
-
-      if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
-        handleRedo();
+        
+        if (event.key === 'z' && !event.shiftKey) {
+          handleUndo();
+        } else if (event.key === 'y' || (event.key === 'z' && event.shiftKey)) {
+          handleRedo();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      // Cleanup cursor timeout
       if (cursorTimeoutRef.current) {
         clearTimeout(cursorTimeoutRef.current);
       }
     };
   }, [handleUndo, handleRedo]);
+
+  // Centralized history management - useEffect that watches elements changes
+  useEffect(() => {
+    // Only add to history for local updates (not remote updates or undo/redo)
+    if (!isRemoteUpdate.current && !isPerformingUndoRedo.current) {
+      const timeout = setTimeout(() => {
+        addToHistory(elements, 'modify');
+      }, 150);
+  
+      return () => clearTimeout(timeout);
+    }
+  }, [elements, addToHistory]);
 
   // Socket event handlers
   useEffect(() => {
@@ -191,34 +217,40 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
 
     socket.emit('join-room', { roomId: room.roomId, userName });
 
-    // Room joined
+    // Room joined - Initialize history
     socket.on('room-joined', (data: { room: Room; users: User[] }) => {
       console.log('Room joined, elements received:', data.room.elements?.length || 0);
-      setElements(data.room.elements || []);
+      const initialElements = data.room.elements || [];
+      
+      isRemoteUpdate.current = true;
+      setElements(initialElements);
       setUsers(data.users);
       
+      // Initialize history with current state
       const initialHistoryState: HistoryState = {
-        elements: [...(data.room.elements || [])],
+        elements: JSON.parse(JSON.stringify(initialElements)),
         timestamp: Date.now(),
         action: 'initial'
       };
+      
       setHistory([initialHistoryState]);
       setHistoryIndex(0);
-      lastElementsRef.current = data.room.elements || [];
+      lastElementsRef.current = [...initialElements];
+      
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 100);
     });
 
-    // User events - improved to prevent duplicates
+    // User events
     socket.on('user-joined', (data: { user: User }) => {
       setUsers(prev => {
-        // Check if user already exists
         const existingUser = prev.find(user => user.id === data.user.id);
         if (existingUser) {
-          // Update existing user
           return prev.map(user => 
             user.id === data.user.id ? data.user : user
           );
         } else {
-          // Add new user
           return [...prev, data.user];
         }
       });
@@ -228,67 +260,98 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
       setUsers(prev => prev.filter(user => user.id !== data.userId));
     });
 
-    // Element events - improved handling
+    // Element events - Mark as remote updates
     socket.on('element-drawn', (data: { element: WhiteboardElement }) => {
       console.log('Element drawn received:', data.element.id, data.element.type);
+      isRemoteUpdate.current = true;
       setElements(prev => {
         const existingIndex = prev.findIndex(el => el.id === data.element.id);
         if (existingIndex !== -1) {
-          // Update existing element
           const newElements = [...prev];
           newElements[existingIndex] = data.element;
           return newElements;
         } else {
-          // Add new element
           return [...prev, data.element];
         }
       });
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
     socket.on('element-updated', (data: { elementId: string; updates: Partial<WhiteboardElement> | WhiteboardElement }) => {
-      console.log('Element updated received:', data.elementId);
+      isRemoteUpdate.current = true;
       setElements(prev => {
         return prev.map(el => {
           if (el.id === data.elementId) {
-            // Handle both full element and partial updates
             return 'type' in data.updates ? data.updates as WhiteboardElement : { ...el, ...data.updates };
           }
           return el;
         });
       });
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
-    // Handle element completion (for adding to history)
     socket.on('element-completed', (data: { element: WhiteboardElement }) => {
       console.log('Element completed received:', data.element.id);
+      isRemoteUpdate.current = true;
       setElements(prev => {
-        const newElements = prev.map(el => 
+        return prev.map(el => 
           el.id === data.element.id ? data.element : el
         );
-        // Add to history when element is completed
-        setTimeout(() => addToHistory(newElements, 'draw'), 100);
-        return newElements;
       });
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
     socket.on('element-deleted', (data: { elementId?: string; elements: WhiteboardElement[] }) => {
       console.log('Element deleted received:', data.elementId || 'multiple');
+      isRemoteUpdate.current = true;
       setElements(data.elements);
-      // Add to history after deletion
-      setTimeout(() => addToHistory(data.elements, 'delete'), 100);
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
-    // Cursor movement - improved user management
+    // Handle undo/redo from other users
+    socket.on('undo-action', (data: { elements: WhiteboardElement[] }) => {
+      console.log('Undo action received from another user');
+      isPerformingUndoRedo.current = true;
+      isRemoteUpdate.current = true;
+      setElements(data.elements);
+      lastElementsRef.current = [...data.elements];
+      
+      setTimeout(() => {
+        isPerformingUndoRedo.current = false;
+        isRemoteUpdate.current = false;
+      }, 100);
+    });
+
+    socket.on('redo-action', (data: { elements: WhiteboardElement[] }) => {
+      console.log('Redo action received from another user');
+      isPerformingUndoRedo.current = true;
+      isRemoteUpdate.current = true;
+      setElements(data.elements);
+      lastElementsRef.current = [...data.elements];
+      
+      setTimeout(() => {
+        isPerformingUndoRedo.current = false;
+        isRemoteUpdate.current = false;
+      }, 100);
+    });
+
+    // Cursor events
     socket.on('cursor-moved', (data: { userId: string; userName: string; cursor: { x: number; y: number } }) => {
       setUsers(prev => {
         const newUsers = [...prev];
         const userIndex = newUsers.findIndex(user => user.id === data.userId);
         
         if (userIndex !== -1) {
-          // Update existing user
           newUsers[userIndex] = { ...newUsers[userIndex], cursor: data.cursor };
         } else {
-          // Add new user if not found
           newUsers.push({
             id: data.userId,
             name: data.userName,
@@ -313,34 +376,13 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
       });
     });
 
-    // Enhanced undo/Redo from other users
-    socket.on('undo-action', (data: { elements: WhiteboardElement[]; action?: string }) => {
-      console.log('Undo action received from another user');
-      setElements(data.elements);
-      setIsExternalAction(true);
-      
-      // Clear history for other users to prevent conflicts
-      setHistory([]);
-      setHistoryIndex(-1);
-    });
-
-    socket.on('redo-action', (data: { elements: WhiteboardElement[]; action?: string }) => {
-      console.log('Redo action received from another user');
-      setElements(data.elements);
-      setIsExternalAction(true);
-      
-      // Clear history for other users to prevent conflicts
-      setHistory([]);
-      setHistoryIndex(-1);
-    });
-
-    // Clear canvas - improved handling
+    // Clear canvas
     socket.on('canvas-cleared', (data: { elements: WhiteboardElement[] }) => {
       console.log('Canvas cleared event received');
-      setElements(data.elements); // Should be empty array
+      isRemoteUpdate.current = true;
+      setElements(data.elements);
       lastElementsRef.current = data.elements;
       
-      // Clear the actual canvas context
       const canvas = document.querySelector('canvas');
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -349,13 +391,15 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
         }
       }
       
-      // Add to history
-      setTimeout(() => addToHistory(data.elements, 'clear'), 100);
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
-    // Enhanced text handling
+    // Text events
     socket.on('text-updated', (data: { element: WhiteboardElement }) => {
       console.log('Text updated received:', data.element.id, data.element.text);
+      isRemoteUpdate.current = true;
       setElements(prev => {
         const existingIndex = prev.findIndex(el => el.id === data.element.id);
         if (existingIndex !== -1) {
@@ -366,6 +410,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
           return [...prev, data.element];
         }
       });
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
     return () => {
@@ -383,127 +430,90 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
       socket.off('canvas-cleared');
       socket.off('text-updated');
       
-      // Cleanup cursor timeout
       if (cursorTimeoutRef.current) {
         clearTimeout(cursorTimeoutRef.current);
       }
     };
-  }, [socket, room.roomId, userName, addToHistory]);
+  }, [socket, room.roomId, userName]);
 
-  // Element creation handler - improved
+  // Element handlers
   const handleElementCreated = useCallback((element: WhiteboardElement) => {
     console.log('Element created locally:', element.id, element.type);
     
-    // Add locally immediately for responsive feel
     setElements(prev => {
       const existingIndex = prev.findIndex(el => el.id === element.id);
       if (existingIndex !== -1) {
-        // Update existing
         const newElements = [...prev];
         newElements[existingIndex] = element;
         return newElements;
       } else {
-        // Add new
         return [...prev, element];
       }
     });
     
-    // Send to server
     socket?.emit('draw-element', { roomId: room.roomId, element });
   }, [socket, room.roomId]);
 
-  // Element update handler with improved batching
   const handleElementUpdated = useCallback((elementId: string, updates: Partial<WhiteboardElement> | WhiteboardElement) => {
-    console.log('Element updated locally:', elementId);
-    
-    // Update locally immediately
     setElements(prev => prev.map(el => 
       el.id === elementId ? ('type' in updates ? updates as WhiteboardElement : { ...el, ...updates }) : el
     ));
 
-    // Batch updates to server
     const updatedElement = 'type' in updates ? updates : { ...elements.find(el => el.id === elementId), ...updates };
     pendingUpdates.current.set(elementId, updatedElement as WhiteboardElement);
 
-    // Clear existing timeout
     const existingTimeout = updateTimeouts.current.get(elementId);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
     }
 
-    // Set new timeout for batched update
     const timeout = setTimeout(() => {
       const element = pendingUpdates.current.get(elementId);
       if (element) {
-        console.log('Sending batched update for:', elementId);
         socket?.emit('update-element', { roomId: room.roomId, elementId, updates: element });
         pendingUpdates.current.delete(elementId);
         updateTimeouts.current.delete(elementId);
       }
-    }, 50); // 50ms debounce
+    }, 50);
 
     updateTimeouts.current.set(elementId, timeout);
   }, [socket, room.roomId, elements]);
 
-  // Element completion handler - improved
   const handleElementCompleted = useCallback((elementId: string, completedElement: WhiteboardElement) => {
-    console.log('Element completed locally:', elementId);
-    
-    // Clear any pending updates
-    const existingTimeout = updateTimeouts.current.get(elementId);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-      updateTimeouts.current.delete(elementId);
-    }
-    pendingUpdates.current.delete(elementId);
+    const newElements = elements.map(el => el.id === elementId ? completedElement : el);
+    setElements(newElements);
+    addToHistory(newElements, "complete");
+    socket?.emit("update-element", { roomId: room.roomId, elementId, updates: completedElement });
+  }, [socket, room.roomId, elements, addToHistory]);
 
-    // Update locally
-    setElements(prev => {
-      const newElements = prev.map(el => el.id === elementId ? completedElement : el);
-      // Add to history when element is completed
-      setTimeout(() => addToHistory(newElements, 'complete'), 100);
-      return newElements;
-    });
-
-    // Send final state to server - use update-element for completion
-    socket?.emit('update-element', { roomId: room.roomId, elementId, updates: completedElement });
-  }, [socket, room.roomId, addToHistory]);
-
-  // Element deletion handler - improved
   const handleElementDeleted = useCallback((elementId: string) => {
-    console.log('Element deleted locally:', elementId);
+    console.log('Element deleted locally:', elementId)
     
     setElements(prev => {
       const newElements = prev.filter(el => el.id !== elementId);
-      // Add to history after deletion
-      setTimeout(() => addToHistory(newElements, 'delete'), 100);
+      addToHistory(newElements, 'delete');
       return newElements;
     });
     
     socket?.emit('delete-element', { roomId: room.roomId, elementId });
   }, [socket, room.roomId, addToHistory]);
 
-  // Cursor movement handler with timeout
   const handleCursorMove = useCallback((cursor: { x: number; y: number }) => {
     socket?.emit('cursor-move', { roomId: room.roomId, cursor });
     
-    // Clear existing timeout
     if (cursorTimeoutRef.current) {
       clearTimeout(cursorTimeoutRef.current);
     }
     
-    // Set new timeout to stop cursor
     cursorTimeoutRef.current = setTimeout(() => {
       socket?.emit('cursor-stopped', { roomId: room.roomId });
       cursorTimeoutRef.current = null;
-    }, 1000); // 1 second delay
+    }, 1000);
   }, [socket, room.roomId]);
 
-  // Enhanced text input handler
   const handleTextInput = useCallback((element: WhiteboardElement) => {
     console.log('Text input locally:', element.id, element.text);
     
-    // Update locally immediately
     setElements(prev => {
       const existingIndex = prev.findIndex(el => el.id === element.id);
       if (existingIndex !== -1) {
@@ -515,13 +525,12 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
       }
     });
     
-    // Send to server
     socket?.emit('text-input', { roomId: room.roomId, element });
   }, [socket, room.roomId]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Fun Header */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white py-6">
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-wider animate-pulse">
@@ -561,7 +570,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
 
       {/* Main Content */}
       <div className="flex-1 flex">
-        {/* Toolbar */}
         <Toolbar
           selectedTool={selectedTool}
           onToolChange={setSelectedTool}
@@ -579,7 +587,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
           canRedo={canRedo}
         />
 
-        {/* Canvas Area */}
         <div className="flex-1 relative">
           <Canvas
             elements={elements}
@@ -601,7 +608,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ room, userName, onLeaveRoom }) 
           />
         </div>
 
-        {/* User List */}
         <UserList users={users} currentUser={userName} />
       </div>
     </div>

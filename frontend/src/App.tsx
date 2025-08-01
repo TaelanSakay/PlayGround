@@ -27,7 +27,7 @@ function App() {
             {/* Modern Header */}
             <div className="text-center mb-12">
               <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4 animate-pulse">
-                PlayGround Whiteboard 🎨
+                PlayGround 🎨
               </h1>
               <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
                 Collaborate in real-time with multiple users on a shared whiteboard. 
