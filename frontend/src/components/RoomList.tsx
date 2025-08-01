@@ -49,19 +49,29 @@ const RoomList: React.FC<RoomListProps> = ({ onJoinRoom }) => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Loading rooms...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Create Room Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Create New Room</h2>
-        <form onSubmit={handleCreateRoom} className="space-y-4">
+    <div className="grid lg:grid-cols-2 gap-8 w-full">
+      {/* Create New Room Card */}
+      <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl text-white">✨</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Create New Room</h2>
+          <p className="text-gray-600">Start a new collaborative session</p>
+        </div>
+        
+        <form onSubmit={handleCreateRoom} className="space-y-6">
           <div>
-            <label htmlFor="roomName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="roomName" className="block text-sm font-semibold text-gray-700 mb-2">
               Room Name
             </label>
             <input
@@ -69,13 +79,14 @@ const RoomList: React.FC<RoomListProps> = ({ onJoinRoom }) => {
               id="roomName"
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter room name"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              placeholder="Enter a creative room name"
               required
             />
           </div>
+          
           <div>
-            <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="userName" className="block text-sm font-semibold text-gray-700 mb-2">
               Your Name
             </label>
             <input
@@ -83,30 +94,43 @@ const RoomList: React.FC<RoomListProps> = ({ onJoinRoom }) => {
               id="userName"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
               placeholder="Enter your name"
               required
             />
           </div>
+          
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             Create Room
           </button>
         </form>
       </div>
 
-      {/* Join Existing Room Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Join Existing Room</h2>
+      {/* Join Existing Room Card */}
+      <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-teal-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl text-white">🚀</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Join Existing Room</h2>
+          <p className="text-gray-600">Connect with your team</p>
+        </div>
         
         {rooms.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No rooms available. Create a new room to get started!</p>
+          <div className="text-center py-12">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">📝</span>
+            </div>
+            <p className="text-gray-500 text-lg mb-2">No rooms available</p>
+            <p className="text-gray-400">Create a new room to get started!</p>
+          </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
-              <label htmlFor="joinUserName" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="joinUserName" className="block text-sm font-semibold text-gray-700 mb-2">
                 Your Name
               </label>
               <input
@@ -114,30 +138,30 @@ const RoomList: React.FC<RoomListProps> = ({ onJoinRoom }) => {
                 id="joinUserName"
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
                 placeholder="Enter your name"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Select a Room</label>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Select a Room</label>
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                 {rooms.map((room) => (
                   <div
                     key={room.id}
-                    className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 hover:shadow-md ${
                       selectedRoom?.id === room.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-green-500 bg-green-50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300 bg-gray-50'
                     }`}
                     onClick={() => setSelectedRoom(room)}
                   >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="font-medium text-gray-800">{room.name}</h3>
-                        <p className="text-sm text-gray-500">Created by {room.createdBy}</p>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-800 mb-1">{room.name}</h3>
+                        <p className="text-sm text-gray-600">Created by {room.createdBy}</p>
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-gray-400 bg-white px-2 py-1 rounded-full">
                         {new Date(room.createdAt).toLocaleDateString()}
                       </div>
                     </div>
@@ -149,7 +173,7 @@ const RoomList: React.FC<RoomListProps> = ({ onJoinRoom }) => {
             <button
               onClick={handleJoinRoom}
               disabled={!selectedRoom || !userName.trim()}
-              className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-700 hover:to-teal-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
             >
               Join Room
             </button>

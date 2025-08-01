@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Room = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
+
 const WhiteboardElementSchema = new mongoose_1.Schema({
     id: { type: String, required: true },
     type: { type: String, required: true, enum: ['drawing', 'text', 'shape'] },
@@ -48,9 +49,24 @@ const WhiteboardElementSchema = new mongoose_1.Schema({
     strokeWidth: { type: Number, required: true, default: 2 },
     fontSize: { type: Number },
     fontFamily: { type: String },
+    // NEW FIELD: shapeType for shape elements
+    shapeType: {
+        type: String,
+        enum: ['rectangle', 'circle', 'line'],
+        required: function() {
+            return this.type === 'shape';
+        }
+    },
     timestamp: { type: Number, required: true },
-    userId: { type: String, required: true }
+    userId: { type: String, required: true },
+    isComplete: { type: Boolean, default: false }
 });
+
+// Add indexes for better query performance
+WhiteboardElementSchema.index({ id: 1 });
+WhiteboardElementSchema.index({ type: 1 });
+WhiteboardElementSchema.index({ timestamp: 1 });
+
 const RoomSchema = new mongoose_1.Schema({
     roomId: {
         type: String,
@@ -64,4 +80,9 @@ const RoomSchema = new mongoose_1.Schema({
     elements: [WhiteboardElementSchema],
     activeUsers: [{ type: String }]
 });
+
+// Add indexes for room queries
+RoomSchema.index({ roomId: 1 });
+RoomSchema.index({ createdBy: 1 });
+
 exports.Room = mongoose_1.default.model('Room', RoomSchema);
