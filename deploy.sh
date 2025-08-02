@@ -1,0 +1,51 @@
+#!/bin/bash
+
+echo "🚀 Whiteboard App Deployment Helper"
+echo "=================================="
+
+echo ""
+echo "📋 Prerequisites Checklist:"
+echo "1. ✅ MongoDB Atlas account and cluster"
+echo "2. ✅ GitHub repository with your code"
+echo "3. ✅ Vercel account"
+echo "4. ✅ Render account"
+echo ""
+
+echo "🔧 Backend Deployment (Render):"
+echo "1. Go to https://render.com"
+echo "2. Create new Web Service"
+echo "3. Connect your GitHub repo"
+echo "4. Set root directory to 'backend'"
+echo "5. Build Command: npm install && npm run build"
+echo "6. Start Command: npm start"
+echo ""
+
+echo "🌐 Frontend Deployment (Vercel):"
+echo "1. Go to https://vercel.com"
+echo "2. Import your GitHub repo"
+echo "3. Set root directory to 'frontend'"
+echo "4. Deploy"
+echo ""
+
+echo "⚙️ Environment Variables to Set:"
+echo ""
+echo "Backend (Render):"
+echo "- NODE_ENV: production"
+echo "- MONGODB_URI: your_mongodb_atlas_connection_string"
+echo "- FRONTEND_URL: your_vercel_frontend_url"
+echo ""
+echo "Frontend (Vercel):"
+echo "- VITE_API_URL: https://your-backend-url.onrender.com/api"
+echo "- VITE_SOCKET_URL: https://your-backend-url.onrender.com"
+echo ""
+
+echo "📖 For detailed instructions, see DEPLOYMENT_GUIDE.md"
+echo ""
+
+echo "🔍 Testing Your Deployment:"
+echo "1. Backend health: https://your-backend-url.onrender.com/health"
+echo "2. Frontend: Visit your Vercel URL"
+echo "3. Test whiteboard functionality"
+echo ""
+
+echo "❓ Need help? Check the troubleshooting section in DEPLOYMENT_GUIDE.md" 
