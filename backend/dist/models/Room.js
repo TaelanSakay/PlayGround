@@ -35,10 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Room = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-
 const WhiteboardElementSchema = new mongoose_1.Schema({
     id: { type: String, required: true },
-    type: { type: String, required: true, enum: ['drawing', 'text', 'shape'] },
+    type: { type: String, required: true, enum: ['drawing', 'text', 'shape', 'image'] },
     x: { type: Number, required: true },
     y: { type: Number, required: true },
     width: { type: Number },
@@ -46,27 +45,16 @@ const WhiteboardElementSchema = new mongoose_1.Schema({
     points: [{ x: Number, y: Number }],
     text: { type: String },
     color: { type: String, required: true, default: '#000000' },
+    fillColor: { type: String }, // New: fill color for shapes
     strokeWidth: { type: Number, required: true, default: 2 },
     fontSize: { type: Number },
     fontFamily: { type: String },
-    // NEW FIELD: shapeType for shape elements
-    shapeType: {
-        type: String,
-        enum: ['rectangle', 'circle', 'line'],
-        required: function() {
-            return this.type === 'shape';
-        }
-    },
+    shapeType: { type: String, enum: ['rectangle', 'circle', 'line'] },
+    imageData: { type: String }, // New: base64 image data for image elements
     timestamp: { type: Number, required: true },
     userId: { type: String, required: true },
     isComplete: { type: Boolean, default: false }
 });
-
-// Add indexes for better query performance
-WhiteboardElementSchema.index({ id: 1 });
-WhiteboardElementSchema.index({ type: 1 });
-WhiteboardElementSchema.index({ timestamp: 1 });
-
 const RoomSchema = new mongoose_1.Schema({
     roomId: {
         type: String,
@@ -80,9 +68,4 @@ const RoomSchema = new mongoose_1.Schema({
     elements: [WhiteboardElementSchema],
     activeUsers: [{ type: String }]
 });
-
-// Add indexes for room queries
-RoomSchema.index({ roomId: 1 });
-RoomSchema.index({ createdBy: 1 });
-
 exports.Room = mongoose_1.default.model('Room', RoomSchema);

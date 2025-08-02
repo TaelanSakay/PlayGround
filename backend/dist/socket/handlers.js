@@ -12,173 +12,73 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupSocketHandlers = void 0;
 const Room_1 = require("../models/Room");
 const users = new Map();
-
-// Enhanced validation and sanitization function for whiteboard elements
-const validateAndSanitizeElement = (element, userId, isCompletion = false) => {
+// Enhanced validation function
+const validateElement = (element) => {
     try {
-        // Check if all required fields are present
         if (!element.id || !element.type || typeof element.x !== 'number' || typeof element.y !== 'number') {
-            console.error('Missing required fields in element:', element);
             return null;
         }
-
-        // Validate type
-        if (!['drawing', 'text', 'shape'].includes(element.type)) {
-            console.error('Invalid element type:', element.type);
-            return null;
-        }
-
-        // Sanitize and create valid element
-        const sanitizedElement = {
+        const sanitized = {
             id: String(element.id),
             type: element.type,
             x: Number(element.x),
             y: Number(element.y),
             color: element.color || '#000000',
+            fillColor: element.fillColor, // New: fill color support
             strokeWidth: Number(element.strokeWidth) || 2,
             timestamp: Number(element.timestamp) || Date.now(),
-            userId: String(element.userId || userId),
-            isComplete: Boolean(element.isComplete || isCompletion),
+            userId: String(element.userId || 'unknown'),
+            isComplete: Boolean(element.isComplete),
         };
-
-        // Add optional fields if present
-        if (element.width !== undefined) sanitizedElement.width = Number(element.width);
-        if (element.height !== undefined) sanitizedElement.height = Number(element.height);
-        if (element.text !== undefined) sanitizedElement.text = String(element.text);
-        if (element.fontSize !== undefined) sanitizedElement.fontSize = Number(element.fontSize);
-        if (element.fontFamily !== undefined) sanitizedElement.fontFamily = String(element.fontFamily);
-        
-        // Handle shapeType - CRITICAL for shape elements
-        if (element.shapeType !== undefined) sanitizedElement.shapeType = String(element.shapeType);
-
-        // Type-specific validation and property handling
-        if (element.type === 'drawing') {
-            // Handle points array for drawing elements with validation
-            if (element.points && Array.isArray(element.points)) {
-                const validPoints = element.points
-                    .filter((point) => typeof point.x === 'number' && typeof point.y === 'number')
-                    .map((point) => ({
-                        x: Number(point.x),
-                        y: Number(point.y)
-                    }));
-
-                // Only set points if we have valid points
-                if (validPoints.length > 0) {
-                    sanitizedElement.points = validPoints;
-                } else {
-                    console.error('Drawing element has no valid points:', element);
-                    return null;
-                }
-            } else {
-                // Drawing elements must have points
-                console.error('Drawing element missing points array:', element);
-                return null;
+        // Add optional fields with better validation
+        if (element.width !== undefined && !isNaN(element.width))
+            sanitized.width = Number(element.width);
+        if (element.height !== undefined && !isNaN(element.height))
+            sanitized.height = Number(element.height);
+        if (element.text !== undefined)
+            sanitized.text = String(element.text);
+        if (element.fontSize !== undefined && !isNaN(element.fontSize))
+            sanitized.fontSize = Number(element.fontSize);
+        if (element.fontFamily !== undefined)
+            sanitized.fontFamily = String(element.fontFamily);
+        if (element.fillColor !== undefined)
+            sanitized.fillColor = String(element.fillColor);
+        if (element.imageData !== undefined)
+            sanitized.imageData = String(element.imageData);
+        // Handle shapeType with validation
+        if (element.shapeType !== undefined) {
+            const validShapeTypes = ['rectangle', 'circle', 'line'];
+            if (validShapeTypes.includes(element.shapeType)) {
+                sanitized.shapeType = element.shapeType;
             }
-
-            // Completion validation for drawing
-            if (isCompletion && sanitizedElement.points.length < 2) {
-                console.error('Drawing element must have at least 2 points for completion:', element);
-                return null;
+            else {
+                console.warn('Invalid shapeType:', element.shapeType);
             }
-            // Creation validation for drawing
-            if (!isCompletion && sanitizedElement.points.length < 1) {
-                console.error('Drawing element must have at least 1 point for creation:', element);
-                return null;
-            }
-        } 
-        else if (element.type === 'shape') {
-            // Shape elements MUST have a shapeType
-            if (!sanitizedElement.shapeType || !['rectangle', 'circle', 'line'].includes(sanitizedElement.shapeType)) {
-                console.error('Shape element has invalid or missing shapeType:', element);
-                return null;
-            }
-
-            // Shape elements need width and height for completion (except lines)
-            if (isCompletion) {
-                if (sanitizedElement.shapeType === 'line') {
-                    // Lines need points instead of width/height
-                    if (element.points && Array.isArray(element.points)) {
-                        const validPoints = element.points
-                            .filter((point) => typeof point.x === 'number' && typeof point.y === 'number')
-                            .map((point) => ({
-                                x: Number(point.x),
-                                y: Number(point.y)
-                            }));
-                        
-                        if (validPoints.length >= 2) {
-                            sanitizedElement.points = validPoints;
-                        } else {
-                            console.error('Line element must have at least 2 points for completion:', element);
-                            return null;
-                        }
-                    } else {
-                        console.error('Line element missing points array:', element);
-                        return null;
-                    }
-                } else {
-                    // Rectangle and circle need dimensions
-                    if (typeof sanitizedElement.width !== 'number' || typeof sanitizedElement.height !== 'number' || 
-                        sanitizedElement.width <= 0 || sanitizedElement.height <= 0) {
-                        console.error('Shape element has invalid dimensions for completion:', element);
-                        return null;
-                    }
-                }
-            }
-            // For creation, we might have width/height of 0 initially
         }
-        else if (element.type === 'text') {
-            // Text elements need text content when completed
-            if (isCompletion) {
-                if (!sanitizedElement.text || sanitizedElement.text.trim() === '') {
-                    console.error('Text element has empty text for completion:', element);
-                    return null;
-                }
+        // Handle points array with better validation
+        if (element.points && Array.isArray(element.points)) {
+            const validPoints = element.points
+                .filter((point) => point &&
+                typeof point === 'object' &&
+                typeof point.x === 'number' &&
+                typeof point.y === 'number' &&
+                !isNaN(point.x) &&
+                !isNaN(point.y))
+                .map((point) => ({
+                x: Number(point.x),
+                y: Number(point.y)
+            }));
+            if (validPoints.length > 0) {
+                sanitized.points = validPoints;
             }
-            // For creation, text might be empty initially
         }
-
-        return sanitizedElement;
-    } catch (error) {
+        return sanitized;
+    }
+    catch (error) {
         console.error('Error validating element:', error);
         return null;
     }
 };
-
-// Function to clean up invalid elements from a room with retry logic
-const cleanupInvalidElements = (room) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const validElements = [];
-        let hasInvalidElements = false;
-        for (const element of room.elements) {
-            const validatedElement = validateAndSanitizeElement(element, 'system');
-            if (validatedElement) {
-                validElements.push(validatedElement);
-            }
-            else {
-                console.error('Removing invalid element from room:', element);
-                hasInvalidElements = true;
-            }
-        }
-        if (hasInvalidElements) {
-            // Use findOneAndUpdate to avoid version conflicts
-            const result = yield Room_1.Room.findOneAndUpdate({ _id: room._id }, { $set: { elements: validElements } }, { new: true, runValidators: true });
-            if (result) {
-                console.log('Cleaned up invalid elements from room');
-                return true;
-            }
-            else {
-                console.error('Failed to update room with cleaned elements');
-                return false;
-            }
-        }
-        return true;
-    }
-    catch (error) {
-        console.error('Error cleaning up invalid elements:', error);
-        return false;
-    }
-});
-
 // Retry function for MongoDB operations
 const retryOperation = (operation_1, ...args_1) => __awaiter(void 0, [operation_1, ...args_1], void 0, function* (operation, maxRetries = 3, delay = 100) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -196,22 +96,17 @@ const retryOperation = (operation_1, ...args_1) => __awaiter(void 0, [operation_
     }
     throw new Error(`Operation failed after ${maxRetries} attempts`);
 });
-
 const setupSocketHandlers = (io) => {
     io.on('connection', (socket) => {
         console.log(`User connected: ${socket.id}`);
-        
         // Join room
         socket.on('join-room', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, userName } = data;
-                // Find or create room
                 let room = yield Room_1.Room.findOne({ roomId });
                 if (!room) {
                     return socket.emit('error', { message: 'Room not found' });
                 }
-                // Clean up any invalid elements in the room
-                yield cleanupInvalidElements(room);
                 // Add user to room
                 const user = {
                     id: socket.id,
@@ -220,13 +115,11 @@ const setupSocketHandlers = (io) => {
                 };
                 users.set(socket.id, user);
                 socket.join(roomId);
-                // Add to active users if not already there
-                if (!room.activeUsers.includes(socket.id)) {
-                    yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                        return yield Room_1.Room.findOneAndUpdate({ roomId }, { $addToSet: { activeUsers: socket.id } }, { new: true });
-                    }));
-                }
-                // Get fresh room data after potential updates
+                // Add to active users
+                yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
+                    return yield Room_1.Room.findOneAndUpdate({ roomId }, { $addToSet: { activeUsers: socket.id } }, { new: true });
+                }));
+                // Get fresh room data
                 room = yield Room_1.Room.findOne({ roomId });
                 if (!room) {
                     return socket.emit('error', { message: 'Room not found' });
@@ -237,7 +130,7 @@ const setupSocketHandlers = (io) => {
                         id: room._id,
                         name: room.name,
                         roomId: room.roomId,
-                        elements: room.elements
+                        elements: room.elements || []
                     },
                     users: Array.from(users.values()).filter(u => u.roomId === roomId)
                 });
@@ -252,90 +145,62 @@ const setupSocketHandlers = (io) => {
                 socket.emit('error', { message: 'Failed to join room' });
             }
         }));
-
-        // Handle drawing events with retry logic
+        // Handle drawing events
         socket.on('draw-element', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, element } = data;
                 console.log('Received draw-element:', { roomId, elementId: element === null || element === void 0 ? void 0 : element.id, elementType: element === null || element === void 0 ? void 0 : element.type, shapeType: element === null || element === void 0 ? void 0 : element.shapeType });
-                // Validate and sanitize element for creation (not completion)
-                const sanitizedElement = validateAndSanitizeElement(element, socket.id, false);
-                if (!sanitizedElement) {
+                const validatedElement = validateElement(element);
+                if (!validatedElement) {
                     console.error('Element validation failed:', element);
                     return socket.emit('error', { message: 'Invalid element data' });
                 }
-                console.log('Adding validated element to room:', sanitizedElement.id, 'shapeType:', sanitizedElement.shapeType);
-                // Use retry logic for adding element
+                console.log('Validated element shapeType:', validatedElement.shapeType);
+                // Add element to room
                 yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                    const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $push: { elements: sanitizedElement } }, { new: true, runValidators: true });
+                    const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $push: { elements: validatedElement } }, { new: true, runValidators: true });
                     if (!result) {
                         throw new Error('Failed to add element to room');
                     }
                     return result;
                 }));
-                console.log('Element saved successfully:', sanitizedElement.id);
-                // Broadcast to other users in the room
-                socket.to(roomId).emit('element-drawn', { element: sanitizedElement });
+                console.log('Element saved successfully:', validatedElement.id);
+                // Broadcast to other users
+                socket.to(roomId).emit('element-drawn', { element: validatedElement });
             }
             catch (error) {
                 console.error('Error handling draw element:', error);
                 socket.emit('error', { message: 'Failed to save element' });
             }
         }));
-
-        // Handle element updates with retry logic
+        // Handle element updates
         socket.on('update-element', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, elementId, updates } = data;
-                console.log('Received update-element:', { roomId, elementId, shapeType: updates === null || updates === void 0 ? void 0 : updates.shapeType });
-                
-                // If updates is a complete element, validate it
-                if ('type' in updates && 'x' in updates && 'y' in updates) {
-                    const sanitizedElement = validateAndSanitizeElement(updates, socket.id, true);
-                    if (!sanitizedElement) {
-                        console.error('Update rejected: invalid complete element data');
+                // Validate the updates
+                const fullElement = 'type' in updates ? updates : null;
+                if (fullElement) {
+                    const validatedElement = validateElement(fullElement);
+                    if (!validatedElement) {
                         return socket.emit('error', { message: 'Invalid element data' });
                     }
+                    // Update with full validated element
                     yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                        const result = yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': elementId }, { $set: { 'elements.$': sanitizedElement } }, { new: true, runValidators: true });
+                        const result = yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': elementId }, { $set: { 'elements.$': validatedElement } }, { new: true, runValidators: true });
                         if (!result) {
                             throw new Error('Failed to update element');
                         }
                         return result;
                     }));
-                    // Broadcast the complete element
-                    socket.to(roomId).emit('element-updated', { elementId, updates: sanitizedElement });
+                    // Broadcast full element to other users
+                    socket.to(roomId).emit('element-updated', { elementId, updates: validatedElement });
                 }
                 else {
-                    // Handle partial updates (for backward compatibility)
-                    const partialUpdates = { ...updates };
-                    
-                    // Validate updates if they contain points
-                    if (updates.points && Array.isArray(updates.points)) {
-                        const validPoints = updates.points
-                            .filter((point) => typeof point.x === 'number' && typeof point.y === 'number')
-                            .map((point) => ({
-                            x: Number(point.x),
-                            y: Number(point.y)
-                        }));
-                        if (validPoints.length < 2) {
-                            console.error('Update rejected: insufficient points for drawing element');
-                            return socket.emit('error', { message: 'Invalid points data' });
-                        }
-                        partialUpdates.points = validPoints;
-                    }
-                    
-                    // Preserve shapeType if provided
-                    if (updates.shapeType) {
-                        partialUpdates.shapeType = String(updates.shapeType);
-                    }
-                    
-                    // Build update object with proper dot notation for nested updates
+                    // Partial update - be more careful
                     const updateFields = {};
-                    Object.keys(partialUpdates).forEach(key => {
-                        updateFields[`elements.$.${key}`] = partialUpdates[key];
+                    Object.keys(updates).forEach(key => {
+                        updateFields[`elements.$.${key}`] = updates[key];
                     });
-                    
                     yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
                         const result = yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': elementId }, { $set: updateFields }, { new: true, runValidators: true });
                         if (!result) {
@@ -343,8 +208,8 @@ const setupSocketHandlers = (io) => {
                         }
                         return result;
                     }));
-                    // Broadcast partial updates
-                    socket.to(roomId).emit('element-updated', { elementId, updates: partialUpdates });
+                    // Broadcast partial updates to other users
+                    socket.to(roomId).emit('element-updated', { elementId, updates });
                 }
             }
             catch (error) {
@@ -352,19 +217,20 @@ const setupSocketHandlers = (io) => {
                 socket.emit('error', { message: 'Failed to update element' });
             }
         }));
-
-        // Handle element deletion with retry logic
+        // Handle element deletion
         socket.on('delete-element', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, elementId } = data;
-                yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                    const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $pull: { elements: { id: elementId } } }, { new: true });
-                    if (!result) {
-                        throw new Error('Failed to delete element');
-                    }
-                    return result;
+                console.log('Received delete-element:', { roomId, elementId });
+                // Remove element from room
+                const result = yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
+                    return yield Room_1.Room.findOneAndUpdate({ roomId }, { $pull: { elements: { id: elementId } } }, { new: true });
                 }));
-                // Broadcast to other users
+                if (!result) {
+                    throw new Error('Failed to delete element');
+                }
+                console.log('Element deleted successfully:', elementId);
+                // Broadcast deletion to other users
                 socket.to(roomId).emit('element-deleted', { elementId });
             }
             catch (error) {
@@ -372,49 +238,48 @@ const setupSocketHandlers = (io) => {
                 socket.emit('error', { message: 'Failed to delete element' });
             }
         }));
-
-        // Handle clear canvas - NEW HANDLER
-        socket.on('clear-canvas', (data) => __awaiter(void 0, void 0, void 0, function* () {
+        // Handle element completion
+        socket.on('complete-element', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
-                const { roomId } = data;
-                console.log('Received clear-canvas for room:', roomId);
-                
-                // Clear all elements from the room in MongoDB
+                const { roomId, elementId, element } = data;
+                console.log('Received complete-element:', { roomId, elementId, elementType: element === null || element === void 0 ? void 0 : element.type });
+                const validatedElement = validateElement(element);
+                if (!validatedElement) {
+                    console.error('Element validation failed:', element);
+                    return socket.emit('error', { message: 'Invalid element data' });
+                }
+                // Mark element as complete
+                validatedElement.isComplete = true;
+                // Update element in room
                 yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                    const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $set: { elements: [] } }, { new: true, runValidators: true });
+                    const result = yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': elementId }, { $set: { 'elements.$': validatedElement } }, { new: true, runValidators: true });
                     if (!result) {
-                        throw new Error('Failed to clear canvas');
+                        throw new Error('Failed to complete element');
                     }
                     return result;
                 }));
-                
-                console.log('Canvas cleared successfully for room:', roomId);
-                
-                // Broadcast to all users in the room (including sender)
-                io.to(roomId).emit('canvas-cleared', { roomId });
+                console.log('Element completed successfully:', elementId);
+                // Broadcast completion to other users
+                socket.to(roomId).emit('element-completed', { element: validatedElement });
             }
             catch (error) {
-                console.error('Error clearing canvas:', error);
-                socket.emit('error', { message: 'Failed to clear canvas' });
+                console.error('Error completing element:', error);
+                socket.emit('error', { message: 'Failed to complete element' });
             }
         }));
-
-        // Handle undo action with retry logic
+        // Handle undo action
         socket.on('undo-action', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, elements } = data;
-                // Validate all elements in the array
+                // Validate all elements
                 const validatedElements = [];
                 for (const element of elements) {
-                    const validatedElement = validateAndSanitizeElement(element, socket.id);
+                    const validatedElement = validateElement(element);
                     if (validatedElement) {
                         validatedElements.push(validatedElement);
                     }
-                    else {
-                        console.error('Skipping invalid element in undo action:', element);
-                    }
                 }
-                // Update room with validated elements state
+                // Update room with new elements state
                 yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
                     const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $set: { elements: validatedElements } }, { new: true, runValidators: true });
                     if (!result) {
@@ -422,7 +287,7 @@ const setupSocketHandlers = (io) => {
                     }
                     return result;
                 }));
-                // Broadcast to other users in the room
+                // Broadcast to other users
                 socket.to(roomId).emit('undo-action', { elements: validatedElements });
             }
             catch (error) {
@@ -430,23 +295,19 @@ const setupSocketHandlers = (io) => {
                 socket.emit('error', { message: 'Failed to process undo action' });
             }
         }));
-
-        // Handle redo action with retry logic
+        // Handle redo action
         socket.on('redo-action', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, elements } = data;
-                // Validate all elements in the array
+                // Validate all elements
                 const validatedElements = [];
                 for (const element of elements) {
-                    const validatedElement = validateAndSanitizeElement(element, socket.id);
+                    const validatedElement = validateElement(element);
                     if (validatedElement) {
                         validatedElements.push(validatedElement);
                     }
-                    else {
-                        console.error('Skipping invalid element in redo action:', element);
-                    }
                 }
-                // Update room with validated elements state
+                // Update room with new elements state
                 yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
                     const result = yield Room_1.Room.findOneAndUpdate({ roomId }, { $set: { elements: validatedElements } }, { new: true, runValidators: true });
                     if (!result) {
@@ -454,7 +315,7 @@ const setupSocketHandlers = (io) => {
                     }
                     return result;
                 }));
-                // Broadcast to other users in the room
+                // Broadcast to other users
                 socket.to(roomId).emit('redo-action', { elements: validatedElements });
             }
             catch (error) {
@@ -462,7 +323,6 @@ const setupSocketHandlers = (io) => {
                 socket.emit('error', { message: 'Failed to process redo action' });
             }
         }));
-
         // Handle cursor movement
         socket.on('cursor-move', (data) => {
             const { roomId, cursor } = data;
@@ -476,67 +336,81 @@ const setupSocketHandlers = (io) => {
                 });
             }
         });
-
-        // Handle text input with retry logic
+        // Handle cursor stopped
+        socket.on('cursor-stopped', (data) => {
+            const { roomId } = data;
+            const user = users.get(socket.id);
+            if (user && user.roomId === roomId) {
+                user.cursor = undefined;
+                socket.to(roomId).emit('cursor-stopped', {
+                    userId: socket.id
+                });
+            }
+        });
+        // Enhanced text input handler
         socket.on('text-input', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { roomId, element } = data;
-                // Validate and sanitize element
-                const sanitizedElement = validateAndSanitizeElement(element, socket.id);
-                if (!sanitizedElement) {
+                console.log('Received text-input:', { roomId, elementId: element === null || element === void 0 ? void 0 : element.id, text: element === null || element === void 0 ? void 0 : element.text });
+                const validatedElement = validateElement(element);
+                if (!validatedElement) {
                     return socket.emit('error', { message: 'Invalid text element data' });
                 }
-                // Add or update text element
-                yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                    const existingIndex = yield Room_1.Room.findOne({ roomId, 'elements.id': sanitizedElement.id });
-                    if (existingIndex) {
-                        // Update existing element
-                        return yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': sanitizedElement.id }, { $set: { 'elements.$': sanitizedElement } }, { new: true, runValidators: true });
-                    }
-                    else {
-                        // Add new element
-                        return yield Room_1.Room.findOneAndUpdate({ roomId }, { $push: { elements: sanitizedElement } }, { new: true, runValidators: true });
-                    }
-                }));
+                // Ensure it's a text element
+                if (validatedElement.type !== 'text') {
+                    return socket.emit('error', { message: 'Element must be of type text' });
+                }
+                // Check if element already exists
+                const existingRoom = yield Room_1.Room.findOne({ roomId, 'elements.id': validatedElement.id });
+                let result;
+                if (existingRoom) {
+                    // Update existing text element
+                    result = yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
+                        return yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': validatedElement.id }, { $set: { 'elements.$': validatedElement } }, { new: true, runValidators: true });
+                    }));
+                    console.log('Text element updated:', validatedElement.id);
+                }
+                else {
+                    // Add new text element
+                    result = yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
+                        return yield Room_1.Room.findOneAndUpdate({ roomId }, { $push: { elements: validatedElement } }, { new: true, runValidators: true });
+                    }));
+                    console.log('Text element added:', validatedElement.id);
+                }
+                if (!result) {
+                    throw new Error('Failed to save text element');
+                }
                 // Broadcast to other users
-                socket.to(roomId).emit('text-input', { element: sanitizedElement });
+                socket.to(roomId).emit('text-updated', { element: validatedElement });
             }
             catch (error) {
                 console.error('Error handling text input:', error);
                 socket.emit('error', { message: 'Failed to save text' });
             }
         }));
-
-        // Handle element completion with strict validation
-        socket.on('complete-element', (data) => __awaiter(void 0, void 0, void 0, function* () {
+        // Handle clear canvas
+        socket.on('clear-canvas', (data) => __awaiter(void 0, void 0, void 0, function* () {
             try {
-                const { roomId, elementId, element } = data;
-                console.log('Received complete-element:', { roomId, elementId, elementType: element === null || element === void 0 ? void 0 : element.type, shapeType: element === null || element === void 0 ? void 0 : element.shapeType });
-                // Validate and sanitize element for completion (strict validation)
-                const sanitizedElement = validateAndSanitizeElement(element, socket.id, true);
-                if (!sanitizedElement) {
-                    console.error('Element completion validation failed:', element);
-                    return socket.emit('error', { message: 'Invalid element data for completion' });
-                }
-                console.log('Completing element in room:', sanitizedElement.id, 'shapeType:', sanitizedElement.shapeType);
-                // Use retry logic for completing element
-                yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
-                    const result = yield Room_1.Room.findOneAndUpdate({ roomId, 'elements.id': elementId }, { $set: { 'elements.$': sanitizedElement } }, { new: true, runValidators: true });
-                    if (!result) {
-                        throw new Error('Failed to complete element in room');
-                    }
-                    return result;
+                const { roomId } = data;
+                console.log('Received clear-canvas for room:', roomId);
+                // Clear all elements from room
+                const result = yield retryOperation(() => __awaiter(void 0, void 0, void 0, function* () {
+                    return yield Room_1.Room.findOneAndUpdate({ roomId }, { $set: { elements: [] } }, { new: true, runValidators: true });
                 }));
-                console.log('Element completed successfully:', sanitizedElement.id);
-                // Broadcast to other users in the room
-                socket.to(roomId).emit('element-completed', { element: sanitizedElement });
+                if (!result) {
+                    throw new Error('Failed to clear canvas in room');
+                }
+                console.log('Canvas cleared successfully for room:', roomId);
+                // Broadcast to ALL clients in the room (including sender)
+                io.to(roomId).emit('canvas-cleared', {
+                    elements: []
+                });
             }
             catch (error) {
-                console.error('Error handling complete element:', error);
-                socket.emit('error', { message: 'Failed to complete element' });
+                console.error('Error handling clear canvas:', error);
+                socket.emit('error', { message: 'Failed to clear canvas' });
             }
         }));
-
         // Handle disconnect
         socket.on('disconnect', () => __awaiter(void 0, void 0, void 0, function* () {
             const user = users.get(socket.id);
@@ -560,5 +434,4 @@ const setupSocketHandlers = (io) => {
         }));
     });
 };
-
 exports.setupSocketHandlers = setupSocketHandlers;
