@@ -72,8 +72,6 @@ const Canvas: React.FC<CanvasProps> = ({
     currentRoom,
     elements,
     setElements: () => {}, // We'll handle this through props
-    setUndoStack: () => {}, // We'll handle this through props
-    setRedoStack: () => {}, // We'll handle this through props
     setCurrentElement,
     setIsDrawing,
     canvasRef,
@@ -640,7 +638,7 @@ const Canvas: React.FC<CanvasProps> = ({
 
     // Use socket events if available
     if (socket && currentRoom) {
-      socketHandleMouseMove(e, currentElement);
+      socketHandleMouseMove(e, currentElement, selectedTool);
       return;
     }
 
@@ -716,7 +714,7 @@ const Canvas: React.FC<CanvasProps> = ({
 
     // Use socket events if available
     if (socket && currentRoom) {
-      socketHandleMouseUp(currentElement);
+      socketHandleMouseUp(currentElement, selectedTool);
       return;
     }
 
