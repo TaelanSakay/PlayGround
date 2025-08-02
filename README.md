@@ -1,6 +1,7 @@
-# Real-Time Multi-User Whiteboard Application
+ # Real-Time Multi-User Whiteboard Application
 
 A collaborative whiteboard application built with React, TypeScript, Node.js, Express, Socket.IO, and MongoDB. Multiple users can draw, write text, and create shapes in real-time on a shared canvas.
+<img width="1920" height="921" alt="image" src="https://github.com/user-attachments/assets/814881e3-2d9b-47cd-9081-0063f6a812da" />
 
 ## 🚀 Features
 
