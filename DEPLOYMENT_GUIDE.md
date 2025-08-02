@@ -59,13 +59,18 @@ This guide will help you deploy your whiteboard application with Vercel (fronten
    - Click "Deploy"
 
 3. **Configure Environment Variables**:
-   - Go to your project settings
-   - Navigate to "Environment Variables"
-   - Add the following:
-     - `VITE_API_URL`: `https://your-backend-url.onrender.com/api`
-     - `VITE_SOCKET_URL`: `https://your-backend-url.onrender.com`
+   - Go to your project settings in Vercel dashboard
+   - Navigate to "Environment Variables" tab
+   - Add the following variables:
+     - **Name**: `VITE_API_URL`
+     - **Value**: `https://your-backend-url.onrender.com/api`
+     - **Environment**: Production (and Preview if you want)
+   - Add another variable:
+     - **Name**: `VITE_SOCKET_URL`
+     - **Value**: `https://your-backend-url.onrender.com`
+     - **Environment**: Production (and Preview if you want)
 
-4. **Redeploy**: After setting environment variables, redeploy your project
+4. **Redeploy**: After setting environment variables, go to "Deployments" tab and click "Redeploy" on your latest deployment
 
 ## Step 4: Update Backend CORS
 
@@ -85,6 +90,11 @@ After getting your Vercel frontend URL, update the `FRONTEND_URL` environment va
 2. **Socket Connection Issues**: Ensure `VITE_SOCKET_URL` points to your Render backend
 3. **MongoDB Connection**: Verify your MongoDB Atlas connection string and IP whitelist
 4. **Build Errors**: Check that all dependencies are in `package.json`
+5. **Vercel Environment Variables**: 
+   - Make sure to set them in the Vercel dashboard, not in `vercel.json`
+   - Variables must start with `VITE_` to be accessible in the frontend
+   - After setting variables, redeploy your project
+   - Check the deployment logs for any environment variable errors
 
 ### Environment Variables Summary:
 
